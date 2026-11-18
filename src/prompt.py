@@ -22,6 +22,15 @@ def build_user_prompt(question: str) -> str:
     """Changing part of the prompt: the user's question."""
     return f"Question: {question.strip()}"
 
+def build_retry_prompt(question: str, bad_sql: str, error: str) -> str:
+    """Prompt that shows the model its failed query and the database error."""
+    return (
+        f"Question: {question.strip()}\n\n"
+        f"Your previous query:\n{bad_sql}\n\n"
+        f"It failed with this error:\n{error}\n\n"
+        "Return a corrected SQLite SELECT statement only."
+    )
+
 
 if __name__ == "__main__":
     system_prompt = build_system_prompt()
