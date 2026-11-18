@@ -1,7 +1,7 @@
 """Chain the steps: question -> SQL -> validate -> execute (-> retry on error)."""
 from dataclasses import dataclass
 
-from src.db import QueryResult, execute_query
+from src.query_execution import QueryResult, execute_query
 from src.llm import fix_sql, generate_sql
 from src.validator import UnsafeSQLError, validate_sql
 
