@@ -36,21 +36,31 @@ def clean_sql(text: str) -> str:
     return text.strip()
 
 
-def generate_sql(question: str) -> str:
-    """Ask the model for a SQL query that answers the question."""
+def _ask(user_prompt: str) -> str:
+    """Send one request to the model and return cleaned SQL text."""
     global _system_prompt
     if _system_prompt is None:
         _system_prompt = build_system_prompt()
 
     response = _get_client().models.generate_content(
         model=MODEL,
-        contents=build_user_prompt(question),
+        contents=user_prompt,
         config=types.GenerateContentConfig(
             system_instruction=_system_prompt,
             temperature=0,
         ),
     )
     return clean_sql(response.text or "")
+
+
+def generate_sql(question: str) -> str:
+    """Ask the model for a SQL query that answers the question."""
+    return _ask(build_user_prompt(question))
+
+
+def fix_sql(question: str, bad_sql: str, error: str) -> str:
+    """Ask the model to correct a query that failed with a database error."""
+    return _ask(build_retry_prompt(question, bad_sql, error))
 
 
 if __name__ == "__main__":
