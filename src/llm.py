@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from src.prompt import build_system_prompt, build_user_prompt
+from src.prompt import build_retry_prompt, build_system_prompt, build_user_prompt
 
 load_dotenv()  # load values from the .env file
 
