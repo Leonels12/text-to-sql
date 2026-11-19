@@ -10,7 +10,7 @@ from src.prompt import build_system_prompt, build_user_prompt
 
 load_dotenv()  # load values from the .env file
 
-MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("LLM_MODEL", "gemini-3.8-flash")
 
 _client = None
 _system_prompt = None
