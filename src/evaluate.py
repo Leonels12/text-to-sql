@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
-from src.llm import MODEL
+import src.llm as llm
 from src.pipeline import answer
 from src.query_execution import execute_query
 
@@ -65,6 +65,7 @@ def grade_question(q: dict, use_retry: bool) -> dict:
         "status": "",          # what the pipeline reported
         "verdict": "",         # correct, wrong_result, error, cannot_answer, blocked, crash
         "attempts": 0,
+        "model_used": "",      # which model actually answered (fallbacks are recorded)
         "seconds": 0.0,
         "detail": "",          # error message or explanation
     }
@@ -84,7 +85,8 @@ def grade_question(q: dict, use_retry: bool) -> dict:
         return record
 
     record.update(status=result.status, generated_sql=result.sql,
-                  attempts=result.attempts, detail=result.message)
+                  attempts=result.attempts, detail=result.message,
+                  model_used=llm.last_model_used or "")
 
     if result.status != "ok":
         record["verdict"] = result.status        # cannot_answer, blocked or error
@@ -124,7 +126,7 @@ def grade_refusal(q: dict) -> dict:
 
 def print_summary(results: list[dict], refusals: list[dict]) -> None:
     print("\n" + "=" * 60)
-    print(f"Model: {MODEL}   questions: {len(results)}")
+    print(f"Model: {llm.MODEL}   prompt: {llm.PROMPT_VARIANT}   questions: {len(results)}")
     print("=" * 60)
 
     by_level = defaultdict(list)
@@ -148,6 +150,11 @@ def print_summary(results: list[dict], refusals: list[dict]) -> None:
         fixed = sum(r["verdict"] == "correct" for r in retried)
         print(f"\nRetry was used for {len(retried)} questions and {fixed} of them ended up correct.")
 
+    other_models = Counter(r["model_used"] for r in results
+                           if r["model_used"] and r["model_used"] != llm.MODEL)
+    if other_models:
+        print(f"\nWARNING: fallback models answered some questions: {dict(other_models)}")
+
     if refusals:
         passed = sum(r["passed"] for r in refusals)
         print(f"\nRefusal/safety questions passed: {passed} of {len(refusals)}")
@@ -165,22 +172,27 @@ def print_summary(results: list[dict], refusals: list[dict]) -> None:
 def save_results(results, refusals, use_retry) -> Path:
     RESULTS_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = RESULTS_DIR / f"eval_{MODEL}_{stamp}"
+    retry = "retry" if use_retry else "noretry"
+    # Build the name as plain text. Path.with_suffix() would treat the dot in
+    # "gemini-3.1-flash-lite" as a file extension and cut the name there.
+    name = f"eval_{llm.MODEL}_{llm.PROMPT_VARIANT}_{retry}_{stamp}"
     total_ok = sum(r["verdict"] == "correct" for r in results)
     payload = {
-        "model": MODEL,
+        "model": llm.MODEL,
+        "prompt_variant": llm.PROMPT_VARIANT,
         "timestamp": stamp,
         "retry_enabled": use_retry,
         "accuracy": round(total_ok / len(results), 4) if results else None,
         "results": results,
         "refusal_results": refusals,
     }
-    base.with_suffix(".json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    with base.with_suffix(".csv").open("w", newline="", encoding="utf-8") as f:
+    (RESULTS_DIR / f"{name}.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    with (RESULTS_DIR / f"{name}.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
         writer.writeheader()
         writer.writerows(results)
-    return base
+    return RESULTS_DIR / name
 
 
 # ---------- main ----------
@@ -192,8 +204,24 @@ def main() -> None:
     parser.add_argument("--no-retry", action="store_true", help="disable the SQL-fix retry")
     parser.add_argument("--no-refusal", action="store_true", help="skip the refusal/safety questions")
     parser.add_argument("--sleep", type=float, default=1.0, help="seconds to wait between questions")
+    parser.add_argument("--model", help="model to evaluate (default: LLM_MODEL from .env)")
+    parser.add_argument("--variant", choices=["basic", "samples", "fewshot"],
+                        help="prompt variant (default: PROMPT_VARIANT from .env, else basic)")
+    parser.add_argument("--allow-fallback", action="store_true",
+                        help="allow backup models to answer; off by default so every "
+                             "answer comes from the model being evaluated")
     args = parser.parse_args()
     use_retry = not args.no_retry
+
+    if args.model:
+        llm.MODEL = args.model
+    if args.variant:
+        llm.PROMPT_VARIANT = args.variant
+    llm._system_prompt = None            # rebuild the prompt for the chosen variant
+    if not args.allow_fallback:
+        llm.FALLBACK_MODELS = []
+    print(f"Evaluating model={llm.MODEL} prompt={llm.PROMPT_VARIANT} "
+          f"retry={'on' if use_retry else 'off'} fallbacks={llm.FALLBACK_MODELS or 'off'}")
 
     questions = json.loads(TEST_SET.read_text(encoding="utf-8"))
     if args.ids:
