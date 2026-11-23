@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download the Chinook database
+        run: |
+          mkdir -p data
+          curl -sSL -o data/chinook.db https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_Sqlite.sqlite
+
+      - name: Check the reference SQL of the test set
+        run: python3 tests/check_reference.py
+
+      - name: Run tests (no API key needed)
+        run: python3 -m pytest -v
