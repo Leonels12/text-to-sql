@@ -1,0 +1,4 @@
+id,difficulty,question,reference_sql,generated_sql,status,verdict,attempts,model_used,seconds,detail
+1,single_table,How many customers are there in total?,SELECT COUNT(*) FROM Customer;,SELECT COUNT(*) FROM Customer,ok,correct,1,gemini-3.1-flash-lite,1.5,
+2,single_table,How many customers are from Brazil?,SELECT COUNT(*) FROM Customer WHERE Country = 'Brazil';,SELECT count(*) FROM Customer WHERE Country = 'Brazil',ok,correct,1,gemini-3.1-flash-lite,0.9,
+3,single_table,List the names of all music genres.,SELECT Name FROM Genre;,SELECT Name FROM Genre,ok,correct,1,gemini-3.1-flash-lite,0.8,
